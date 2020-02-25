@@ -22,6 +22,7 @@ import (
 	"github.com/openshift/cluster-kube-apiserver-operator/pkg/operator/resourcesynccontroller"
 	"github.com/openshift/cluster-kube-apiserver-operator/pkg/operator/targetconfigcontroller"
 	"github.com/openshift/cluster-kube-apiserver-operator/pkg/operator/terminationobserver"
+	"github.com/openshift/cluster-kube-apiserver-operator/pkg/operator/defaultscccontroller"
 	"github.com/openshift/cluster-kube-apiserver-operator/pkg/operator/v410_00_assets"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/operator/certrotation"
@@ -231,6 +232,15 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		controllerContext.EventRecorder,
 	)
 
+	defaultSCCController, err := defaultscccontroller.NewDefaultSCCController(&defaultscccontroller.Options{
+		Config: controllerContext.KubeConfig,
+		Recorder: controllerContext.EventRecorder,
+		ResyncPeriod: 30 * time.Minute,
+	})
+	if err != nil {
+		return err
+	}
+
 	// register termination metrics
 	terminationobserver.RegisterMetrics()
 
@@ -255,6 +265,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go terminationObserver.Run(ctx, 1)
 	go boundSATokenSignerController.Run(ctx)
 	go staleConditionsController.Run(ctx, 1)
+	go defaultSCCController.Run(ctx)
 
 	<-ctx.Done()
 	return fmt.Errorf("stopped")
