@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"k8s.io/apimachinery/pkg/types"
-
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
@@ -16,11 +15,11 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-
 	securityv1 "github.com/openshift/api/security/v1"
 	securityv1client "github.com/openshift/client-go/security/clientset/versioned/typed/security/v1"
 	securityv1listers "github.com/openshift/client-go/security/listers/security/v1"
+	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/openshift/library-go/pkg/operator/v1helpers"
 )
 
 const (
@@ -28,15 +27,22 @@ const (
 )
 
 type Options struct {
-	Config       *rest.Config
-	Recorder     events.Recorder
-	ResyncPeriod time.Duration
+	Config         *rest.Config
+	OperatorClient v1helpers.OperatorClient
+	Recorder       events.Recorder
+	ResyncPeriod   time.Duration
 }
 
 func NewDefaultSCCController(options *Options) (controller *DefaultSCCController, err error) {
 	client, clientErr := securityv1client.NewForConfig(options.Config)
 	if clientErr != nil {
 		err = fmt.Errorf("[%s] failed to create client for security/v1 - %s", ControllerName, clientErr.Error())
+		return
+	}
+
+	defaultSCCSet, renderErr := Render()
+	if renderErr != nil {
+		err = fmt.Errorf("[%s] failed to render default SCC assets - %s", ControllerName, renderErr.Error())
 		return
 	}
 
@@ -60,11 +66,13 @@ func NewDefaultSCCController(options *Options) (controller *DefaultSCCController
 	controller = &DefaultSCCController{
 		queue:    queue,
 		informer: informer,
-		syncer: &Syncer{
-			lister:   lister,
-			recorder: recorder,
-		},
 		recorder: recorder,
+		syncer: &Syncer{
+			lister:        lister,
+			recorder:      recorder,
+			defaultSCCSet: defaultSCCSet,
+			updater:       NewOperatorStatusUpdater(options.OperatorClient),
+		},
 	}
 
 	return
@@ -111,7 +119,7 @@ func (c *DefaultSCCController) processNextWorkItem() bool {
 
 	request, ok := key.(types.NamespacedName)
 	if !ok {
-		// As the item in the workqueue is actually invalid, we call Forget here else
+		// As the item in the work queue is actually invalid, we call Forget here else
 		// we'd go into a loop of attempting to process a work item that is invalid.
 		c.queue.Forget(key)
 
@@ -120,7 +128,7 @@ func (c *DefaultSCCController) processNextWorkItem() bool {
 	}
 
 	if err := c.syncer.Sync(request); err != nil {
-		// Put the item back on the workqueue to handle any transient errors.
+		// Put the item back on the work queue to handle any transient errors.
 		c.queue.AddRateLimited(key)
 
 		utilruntime.HandleError(fmt.Errorf("[%s] key=%s error syncing, requeuing - %s", ControllerName, request, err.Error()))

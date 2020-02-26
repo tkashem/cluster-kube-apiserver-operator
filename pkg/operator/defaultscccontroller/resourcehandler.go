@@ -18,7 +18,7 @@ func NewResourceHandler(queue workqueue.RateLimitingInterface) ResourceHandler {
 var _ cache.ResourceEventHandler = ResourceHandler{}
 
 type ResourceHandler struct {
-	// The underlying work queue where the keys are added for reconciliation.
+	// The underlying work queue where the keys are added for sync.
 	queue workqueue.RateLimitingInterface
 }
 

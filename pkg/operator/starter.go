@@ -233,9 +233,10 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	)
 
 	defaultSCCController, err := defaultscccontroller.NewDefaultSCCController(&defaultscccontroller.Options{
+		OperatorClient: operatorClient,
 		Config: controllerContext.KubeConfig,
 		Recorder: controllerContext.EventRecorder,
-		ResyncPeriod: 30 * time.Minute,
+		ResyncPeriod: 6 * time.Hour,
 	})
 	if err != nil {
 		return err

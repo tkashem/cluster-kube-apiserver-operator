@@ -10,21 +10,39 @@ import (
 )
 
 type Syncer struct {
-	lister   securityv1listers.SecurityContextConstraintsLister
-	recorder events.Recorder
+	lister        securityv1listers.SecurityContextConstraintsLister
+	recorder      events.Recorder
+	updater       OperatorStatusUpdater
+	defaultSCCSet *DefaultSCC
 }
 
 func (s *Syncer) Sync(key types.NamespacedName) error {
-	current, err := s.lister.Get(key.Name)
-	if err != nil {
-		if k8serrors.IsNotFound(err) {
-			klog.Infof("[%s] key=%s scc has been deleted - %s", ControllerName, key.Name, err.Error())
-			return nil
-		}
-
-		return err
+	// If it's not to do with the default SCC, we don't care.
+	if !s.defaultSCCSet.IsDefault(key.Name) {
+		return nil
 	}
 
-	klog.Infof("[%s] key=%s scc has been updated", ControllerName, current.Name)
-	return nil
+	mutated := make([]string, 0)
+	for _, original := range s.defaultSCCSet.List() {
+		current, err := s.lister.Get(original.GetName())
+		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				klog.Infof("[%s] name=%s scc has been deleted - %s", ControllerName, original.GetName(), err.Error())
+				continue
+			}
+
+			return err
+		}
+
+		if !IsSCCEqual(original, current) {
+			mutated = append(mutated, current.GetName())
+		}
+	}
+
+	if len(mutated) > 0 {
+		klog.Infof("[%s] default scc has mutated %s", ControllerName, mutated)
+	}
+
+	condition := NewCondition(mutated)
+	return s.updater.UpdateStatus(condition)
 }

@@ -38,6 +38,8 @@ $(call build-image,ocp-cluster-kube-apiserver-operator,$(IMAGE_REGISTRY)/ocp/4.3
 # and also hooked into {update,verify}-generated for broader integration.
 $(call add-bindata,v4.1.0,./bindata/v4.1.0/...,bindata,v410_00_assets,pkg/operator/v410_00_assets/bindata.go)
 
+$(call add-bindata,defaultscc,./bindata/defaultscc/...,bindata,defaultscc_assets,pkg/operator/defaultscc_assets/bindata.go)
+
 # This will call a macro called "add-crd-gen" will will generate crd manifests based on the parameters:
 # $1 - target name
 # $2 - apis
